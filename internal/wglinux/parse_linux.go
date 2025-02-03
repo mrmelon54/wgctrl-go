@@ -6,6 +6,7 @@ package wglinux
 import (
 	"fmt"
 	"net"
+	"net/netip"
 	"time"
 	"unsafe"
 
@@ -130,24 +131,26 @@ func parsePeer(ad *netlink.AttributeDecoder) wgtypes.Peer {
 }
 
 // parseAllowedIPs parses a slice of net.IPNet from a netlink attribute payload.
-func parseAllowedIPs(ipns *[]net.IPNet) func(ad *netlink.AttributeDecoder) error {
+func parseAllowedIPs(ipns *[]netip.Prefix) func(ad *netlink.AttributeDecoder) error {
 	return func(ad *netlink.AttributeDecoder) error {
 		// Initialize to the number of allowed IPs and begin iterating through
 		// the netlink array to decode each one.
-		*ipns = make([]net.IPNet, 0, ad.Len())
+		*ipns = make([]netip.Prefix, 0, ad.Len())
 		for ad.Next() {
 			// Allowed IP nested attributes.
 			ad.Nested(func(nad *netlink.AttributeDecoder) error {
 				var (
-					ipn    net.IPNet
-					mask   int
+					ipn  netip.Addr
+					mask int
+					// TODO: we already have the family stored in ipn, is this needed?
 					family int
+					_      = family
 				)
 
 				for nad.Next() {
 					switch nad.Type() {
 					case unix.WGALLOWEDIP_A_IPADDR:
-						nad.Do(parseAddr(&ipn.IP))
+						nad.Do(parseAddr(&ipn))
 					case unix.WGALLOWEDIP_A_CIDR_MASK:
 						mask = int(nad.Uint8())
 					case unix.WGALLOWEDIP_A_FAMILY:
@@ -159,16 +162,9 @@ func parseAllowedIPs(ipns *[]net.IPNet) func(ad *netlink.AttributeDecoder) error
 					return err
 				}
 
-				// The address family determines the correct number of bits in
-				// the mask.
-				switch family {
-				case unix.AF_INET:
-					ipn.Mask = net.CIDRMask(mask, 32)
-				case unix.AF_INET6:
-					ipn.Mask = net.CIDRMask(mask, 128)
-				}
+				ipp := netip.PrefixFrom(ipn, mask)
 
-				*ipns = append(*ipns, ipn)
+				*ipns = append(*ipns, ipp)
 				return nil
 			})
 		}
@@ -191,17 +187,14 @@ func parseKey(key *wgtypes.Key) func(b []byte) error {
 }
 
 // parseAddr parses a net.IP from raw in_addr or in6_addr struct bytes.
-func parseAddr(ip *net.IP) func(b []byte) error {
+func parseAddr(ip *netip.Addr) func(b []byte) error {
 	return func(b []byte) error {
-		switch len(b) {
-		case net.IPv4len, net.IPv6len:
-			// Okay to convert directly to net.IP; memory layout is identical.
-			*ip = make(net.IP, len(b))
-			copy(*ip, b)
-			return nil
-		default:
+		parsedIP, ok := netip.AddrFromSlice(b)
+		if !ok {
 			return fmt.Errorf("wglinux: unexpected IP address size: %d", len(b))
 		}
+		*ip = parsedIP
+		return nil
 	}
 }
 

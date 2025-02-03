@@ -1,10 +1,10 @@
 package wgctrl_test
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"sort"
 	"strings"
@@ -144,9 +144,9 @@ func testGet(t *testing.T, c *wgctrl.Client, d *wgtypes.Device) {
 func testConfigure(t *testing.T, c *wgctrl.Client, d *wgtypes.Device) {
 	var (
 		port = 8888
-		ips  = []net.IPNet{
-			wgtest.MustCIDR("192.0.2.0/32"),
-			wgtest.MustCIDR("2001:db8::/128"),
+		ips  = []netip.Prefix{
+			netip.MustParsePrefix("192.0.2.0/32"),
+			netip.MustParsePrefix("2001:db8::/128"),
 		}
 
 		priv    = wgtest.MustPrivateKey()
@@ -194,7 +194,7 @@ func testConfigure(t *testing.T, c *wgctrl.Client, d *wgtypes.Device) {
 	for i := range dn.Peers {
 		ips := dn.Peers[i].AllowedIPs
 		sort.Slice(ips, func(i, j int) bool {
-			return bytes.Compare(ips[i].IP, ips[j].IP) > 0
+			return ips[i].Addr().Compare(ips[j].Addr()) > 0
 		})
 	}
 
@@ -229,17 +229,19 @@ func testConfigureManyIPs(t *testing.T, c *wgctrl.Client, d *wgtypes.Device) {
 			t.Fatalf("failed to create cursor: %v", err)
 		}
 
-		var ips []net.IPNet
+		var ips []netip.Prefix
 		for pos := cur.Next(); pos != nil; pos = cur.Next() {
 			bits := 128
 			if pos.IP.To4() != nil {
 				bits = 32
 			}
 
-			ips = append(ips, net.IPNet{
-				IP:   pos.IP,
-				Mask: net.CIDRMask(bits, bits),
-			})
+			addr, ok := netip.AddrFromSlice(pos.IP)
+			if !ok {
+				t.Fatalf("failed to convert net.IP to netip.Addr: %s", pos.IP)
+			}
+
+			ips = append(ips, netip.PrefixFrom(addr, bits))
 		}
 
 		peers = append(peers, wgtypes.PeerConfig{
@@ -291,7 +293,7 @@ func testConfigureManyPeers(t *testing.T, c *wgctrl.Client, d *wgtypes.Device) {
 			PresharedKey:      &pk,
 			ReplaceAllowedIPs: true,
 			Endpoint: &net.UDPAddr{
-				IP:   ips[0].IP,
+				IP:   ips[0].Addr().AsSlice(),
 				Port: 1111,
 			},
 			PersistentKeepaliveInterval: &dur,
@@ -370,7 +372,6 @@ func testConfigurePeersUpdateOnly(t *testing.T, c *wgctrl.Client, d *wgtypes.Dev
 			t.Skip("FreeBSD kernel devices do not support UpdateOnly flag")
 		}
 
-
 		t.Fatalf("failed to configure second time on %q: %v", d.Name, err)
 	}
 
@@ -428,7 +429,7 @@ func countPeerIPs(d *wgtypes.Device) int {
 	return count
 }
 
-func ipsString(ipns []net.IPNet) string {
+func ipsString(ipns []netip.Prefix) string {
 	ss := make([]string, 0, len(ipns))
 	for _, ipn := range ipns {
 		ss = append(ss, ipn.String())
@@ -437,23 +438,25 @@ func ipsString(ipns []net.IPNet) string {
 	return strings.Join(ss, ", ")
 }
 
-func generateIPs(n int) []net.IPNet {
+func generateIPs(n int) []netip.Prefix {
 	cur, err := ipaddr.Parse("2001:db8::/64")
 	if err != nil {
 		panicf("failed to create cursor: %v", err)
 	}
 
-	ips := make([]net.IPNet, 0, n)
+	ips := make([]netip.Prefix, 0, n)
 	for i := 0; i < n; i++ {
 		pos := cur.Next()
 		if pos == nil {
 			panic("hit nil IP during IP generation")
 		}
 
-		ips = append(ips, net.IPNet{
-			IP:   pos.IP,
-			Mask: net.CIDRMask(128, 128),
-		})
+		addr, ok := netip.AddrFromSlice(pos.IP)
+		if !ok {
+			panicf("failed to convert net.IP to netip.Addr: %s", pos.IP)
+		}
+
+		ips = append(ips, netip.PrefixFrom(addr, 128))
 	}
 
 	return ips
