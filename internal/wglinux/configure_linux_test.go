@@ -532,7 +532,7 @@ func generateIPs(n int) []netip.Prefix {
 			panicf("failed to convert net.IP to netip.Addr: %s", pos.IP)
 		}
 
-		ips = append(ips, netip.PrefixFrom(addr, 128))
+		ips = append(ips, netip.PrefixFrom(addr, addr.BitLen()))
 	}
 
 	return ips
