@@ -4,6 +4,7 @@
 package wglinux
 
 import (
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"net"
 	"net/netip"
 	"runtime"
@@ -485,7 +486,7 @@ func TestLinuxClientDevicesOK(t *testing.T) {
 				t.Fatalf("failed to get devices: %v", err)
 			}
 
-			if diff := cmp.Diff(tt.devices, devices); diff != "" {
+			if diff := cmp.Diff(tt.devices, devices, cmpopts.EquateComparable(netip.Prefix{})); diff != "" {
 				t.Fatalf("unexpected devices (-want +got):\n%s", diff)
 			}
 		})

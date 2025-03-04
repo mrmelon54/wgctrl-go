@@ -1,6 +1,7 @@
 package wguser
 
 import (
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"net"
 	"net/netip"
 	"testing"
@@ -157,7 +158,7 @@ func TestClientDevices(t *testing.T) {
 				return
 			}
 
-			if diff := cmp.Diff([]*wgtypes.Device{tt.d}, devs); diff != "" {
+			if diff := cmp.Diff([]*wgtypes.Device{tt.d}, devs, cmpopts.EquateComparable(netip.Prefix{})); diff != "" {
 				t.Fatalf("unexpected Devices (-want +got):\n%s", diff)
 			}
 		})
