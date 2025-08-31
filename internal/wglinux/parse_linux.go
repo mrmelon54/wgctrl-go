@@ -140,11 +140,9 @@ func parseAllowedIPs(ipns *[]netip.Prefix) func(ad *netlink.AttributeDecoder) er
 			// Allowed IP nested attributes.
 			ad.Nested(func(nad *netlink.AttributeDecoder) error {
 				var (
-					ipn  netip.Addr
-					mask int
-					// TODO: we already have the family stored in ipn, is this needed?
+					ipn    netip.Addr
+					mask   int
 					family int
-					_      = family
 				)
 
 				for nad.Next() {
@@ -160,6 +158,19 @@ func parseAllowedIPs(ipns *[]netip.Prefix) func(ad *netlink.AttributeDecoder) er
 
 				if err := nad.Err(); err != nil {
 					return err
+				}
+
+				switch family {
+				case unix.AF_INET:
+					if !ipn.Is4() {
+						return fmt.Errorf("decoded IP address does not match the address family")
+					}
+				case unix.AF_INET6:
+					if !ipn.Is6() {
+						return fmt.Errorf("decoded IP address does not match the address family")
+					}
+				default:
+					return fmt.Errorf("invalid IP address family")
 				}
 
 				ipp := netip.PrefixFrom(ipn, mask)
