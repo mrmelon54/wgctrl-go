@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/mikioh/ipaddr"
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/internal/wginternal"
@@ -198,7 +199,7 @@ func testConfigure(t *testing.T, c *wgctrl.Client, d *wgtypes.Device) {
 		})
 	}
 
-	if diff := cmp.Diff(d, dn); diff != "" {
+	if diff := cmp.Diff(d, dn, cmpopts.EquateComparable(netip.Prefix{})); diff != "" {
 		t.Fatalf("unexpected Device from Device (-want +got):\n%s", diff)
 	}
 
