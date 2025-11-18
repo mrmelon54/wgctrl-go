@@ -195,7 +195,7 @@ func testConfigure(t *testing.T, c *wgctrl.Client, d *wgtypes.Device) {
 	for i := range dn.Peers {
 		ips := dn.Peers[i].AllowedIPs
 		sort.Slice(ips, func(i, j int) bool {
-			return ips[i].Addr().Compare(ips[j].Addr()) > 0
+			return ips[i].Addr().Less(ips[j].Addr())
 		})
 	}
 
